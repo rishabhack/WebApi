@@ -318,25 +318,26 @@ namespace Meetingselect.Api.Services
             //            Vat = o.TaxPercentage
             //        }))
             //    .ToList();
-            // ── Additional Packages (all other categories) 3 is parking in chp and 4 is other, i don't see any fit for Equipment pack. ────────────────────────
+            // ── Additional Packages (all other categories) 3 is parking in chp and 4 is other, i don't see any fit for Equipment pack.
+            // Grouped by mapped InfoID to ensure one ProposalAdditional per InfoID (matches how RFPResponse.aspx works)
             cR.additionalPackages = request.Dates
                 .SelectMany(d => d.Options
                     .Where(o => o.CategoryId != 1
-                             && o.CategoryId != 2
-                             )
-                    .Select(o => new AdditionalPackage
-                    {
-                        AdditionalInfoID = GetAdditionalInfoIdFromCHPCategory(o.CategoryId),
-                        Rate = o.PricePerItem,
-                        Units = o.Amount,
-                        Notes = o.InternalName ?? "",
-                        RateForYou = o.PriceTotal,
-                        InclOrExclVat = o.TaxPercentage > 0,
-                        Vat = o.TaxPercentage,
-                        InclOrExclVatName = o.TaxPercentage > 0 ? "Inclusive" : "Exclusive",
-                        FeeUnit = o.CalculationType.ToString(),
-                        Section=4
-                    }))
+                             && o.CategoryId != 2))
+                .GroupBy(o => GetAdditionalInfoIdFromCHPCategory(o.CategoryId))
+                .Select(g => new AdditionalPackage
+                {
+                    AdditionalInfoID = g.Key,
+                    Rate = g.Sum(o => o.PriceTotal) / Math.Max(g.Sum(o => o.Amount), 1),
+                    Units = g.Sum(o => o.Amount),
+                    Notes = string.Join(", ", g.Select(o => o.InternalName).Where(n => !string.IsNullOrEmpty(n))),
+                    RateForYou = g.Sum(o => o.PriceTotal),
+                    InclOrExclVat = g.Any(o => o.TaxPercentage > 0),
+                    Vat = g.Max(o => o.TaxPercentage),
+                    InclOrExclVatName = g.Any(o => o.TaxPercentage > 0) ? "Inclusive" : "Exclusive",
+                    FeeUnit = g.First().CalculationType.ToString(),
+                    Section = 4
+                })
                 .ToList();
             cR.commission = new Commission();  // or map from Reservation data
             cR.hotelPackages = new List<HotelPackage>();
@@ -353,7 +354,7 @@ namespace Meetingselect.Api.Services
         /// Maps CHP CategoryId to a valid enumAdditionInfo.AdditionalInfoID.
         /// CHP CategoryId 3 = Parking → enumAdditionInfo 19 ("Parking fee", Section 4)
         /// CHP CategoryId 4 = Other   → enumAdditionInfo 24 ("Other", Section 4)
-        /// NOTE: Requires DB insert: INSERT INTO enumAdditionInfo (AdditionalInfoID, SectionID, AdditionalInfoEN) VALUES (24, 4, 'Other');
+        /// NOTE: Requires DB insert with all language columns - see SQL script in plan.
         /// </summary>
         private static int GetAdditionalInfoIdFromCHPCategory(int chpCategoryId)
         {
