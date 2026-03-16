@@ -251,25 +251,27 @@ namespace Meetingselect.Api.Services
                         TaxPercentage = s.TaxPercentage
                     }))
                 .ToList();
-            // ── Meeting Packages (Conference/Meeting) ───────────────────────────────
+            // ── Meeting Packages (from Dates[].Packages[]) ───────────────────────────
             cR.meetingPackage = request.Dates
-                .SelectMany(d => d.Spaces
-                    .Where(s => !excludedSpaceIds.Contains(s.SpaceId))
-                    .Select(s => new MeetingPackage
+                .Where(d => d.Packages != null)
+                .SelectMany(d => d.Packages
+                    .Select(p => new MeetingPackage
                     {
-                        PackageName = s.SpaceName,
-                        Attendees = s.Seats,
-                        StartTime = MinutesToTimeString(s.StartMinutes),
-                        EndTime = MinutesToTimeString(s.EndMinutes),
-                        StandardRate = s.PricePerSeat,
-                        RequirementDate = s.StartDate.ToString("yyyy-MM-dd"),
-                        Setup = GetExternalRoomSetupName(s.SettingId),
-                        PackageContent = s.Descriptions
+                        PackageName = p.PackageName,
+                        Attendees = p.Amount,
+                        StartTime = "",
+                        EndTime = "",
+                        StandardRate = p.PriceExclTax,
+                        RequirementDate = p.Date.ToString("yyyy-MM-dd"),
+                        Setup = "",
+                        PackageContent = p.Descriptions
                                                   ?.FirstOrDefault(desc => desc.Language == lang)
                                                   ?.Description ?? "",
-                        ProposalRateExclTaxes = s.PriceTotal,
-                        ProposalRateInclTaxes = s.Tax?.TaxableAmount,
-                        TaxPercentage = s.TaxPercentage
+                        ProposalRateExclTaxes = p.TotalExclTax,
+                        ProposalRateInclTaxes = p.TotalInclTax,
+                        TaxPercentage = p.PriceInclTax > 0 && p.PriceExclTax > 0
+                            ? Math.Round((p.PriceInclTax - p.PriceExclTax) / p.PriceExclTax * 100, 2)
+                            : 0
                     }))
                 .ToList();
             // ── Food Packages (CategoryId = 1) ───────────────────────────────────
