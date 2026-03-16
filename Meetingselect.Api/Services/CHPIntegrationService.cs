@@ -229,9 +229,9 @@ namespace Meetingselect.Api.Services
                 .Select(s => s.SpaceId)
                 .ToHashSet();
             // ── Meeting Room Packages ────────────────────────────────────────────
+            // Note: PriceTotal >= 0 — meeting rooms can be complimentary (price 0) and still need to appear
             cR.meetingRoomPackages = request.Dates
                 .SelectMany(d => d.Spaces
-                    .Where(s => s.PriceTotal > 0)
                     .Where(s => !excludedSpaceIds.Contains(s.SpaceId))
                     .Select(s => new MeetingRoomPackage
                     {
@@ -247,7 +247,28 @@ namespace Meetingselect.Api.Services
                                                   ?.FirstOrDefault(desc => desc.Language == lang)
                                                   ?.Description ?? "",
                         ProposalRateExclTaxes = s.PriceTotal,
-                        ProposalRateInclTaxes = s.Tax?.TaxableAmount,  // ✅ now works
+                        ProposalRateInclTaxes = s.Tax?.TaxableAmount,
+                        TaxPercentage = s.TaxPercentage
+                    }))
+                .ToList();
+            // ── Meeting Packages (Conference/Meeting) ───────────────────────────────
+            cR.meetingPackage = request.Dates
+                .SelectMany(d => d.Spaces
+                    .Where(s => !excludedSpaceIds.Contains(s.SpaceId))
+                    .Select(s => new MeetingPackage
+                    {
+                        PackageName = s.SpaceName,
+                        Attendees = s.Seats,
+                        StartTime = MinutesToTimeString(s.StartMinutes),
+                        EndTime = MinutesToTimeString(s.EndMinutes),
+                        StandardRate = s.PricePerSeat,
+                        RequirementDate = s.StartDate.ToString("yyyy-MM-dd"),
+                        Setup = GetExternalRoomSetupName(s.SettingId),
+                        PackageContent = s.Descriptions
+                                                  ?.FirstOrDefault(desc => desc.Language == lang)
+                                                  ?.Description ?? "",
+                        ProposalRateExclTaxes = s.PriceTotal,
+                        ProposalRateInclTaxes = s.Tax?.TaxableAmount,
                         TaxPercentage = s.TaxPercentage
                     }))
                 .ToList();
@@ -342,7 +363,6 @@ namespace Meetingselect.Api.Services
             cR.commission = new Commission();  // or map from Reservation data
             cR.hotelPackages = new List<HotelPackage>();
             cR.equipmentPackages = new List<EquipmentPackage>();
-            //cR.meetingPackage = new List<MeetingPackage>();
             cR.conditionsAndAttachments = new ConditionsAndAttachments
             {
                 cancellationPaymentPolicy = new CancellationPaymentPolicy(),
